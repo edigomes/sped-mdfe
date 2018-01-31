@@ -2,6 +2,17 @@
 
 namespace NFePHP\MDFe;
 
+use NFePHP\Common\Base\BaseTools;
+use NFePHP\Common\DateTime\DateTime;
+use NFePHP\Common\Dom\Dom;
+use NFePHP\Common\Dom\ValidXsd;
+use NFePHP\Common\Exception;
+use NFePHP\Common\Files;
+use NFePHP\Common\LotNumber\LotNumber;
+use NFePHP\Common\Strings\Strings;
+use NFePHP\MDFe\Auxiliar\Identify;
+use NFePHP\MDFe\Auxiliar\Response;
+
 /**
  * Classe principal para a comunicação com a SEFAZ
  *
@@ -12,23 +23,6 @@ namespace NFePHP\MDFe;
  * @link      http://github.com/nfephp-org/sped-mdfe for the canonical source repository
  * @author    Roberto L. Machado <linux.rlm at gmail dot com>
  */
-
-use NFePHP\Common\Base\BaseTools;
-use NFePHP\Common\DateTime\DateTime;
-use NFePHP\Common\LotNumber\LotNumber;
-use NFePHP\Common\Strings\Strings;
-use NFePHP\Common\Files;
-use NFePHP\Common\Exception;
-use NFePHP\Common\Dom\Dom;
-use NFePHP\Common\Dom\ValidXsd;
-use NFePHP\MDFe\Auxiliar\Response;
-use NFePHP\MDFe\Mail;
-use NFePHP\MDFe\Auxiliar\Identify;
-
-if (!defined('NFEPHP_ROOT')) {
-    define('NFEPHP_ROOT', dirname(dirname(__FILE__)));
-}
-
 class Tools extends BaseTools
 {
     /**
@@ -56,6 +50,17 @@ class Tools extends BaseTools
      * @var array
      */
     private $aLastRetEvent = array();
+    /**
+     * @var string
+     */
+    protected $rootDir;
+
+    public function __construct($configJson = '')
+    {
+        parent::__construct($configJson);
+        $this->rootDir = dirname(__DIR__);
+    }
+
     /**
      * imprime
      * Imprime o documento eletrônico (MDFe, CCe, Inut.)
@@ -398,15 +403,27 @@ class Tools extends BaseTools
         //montagem dos dados da mensagem SOAP
         $body = "<mdfeDadosMsg xmlns=\"$this->urlNamespace\">$cons</mdfeDadosMsg>";
         $method = $this->urlMethod;
+
+        if (! $this->validarXml($xml) || sizeof($this->errors)) {
+            $msg = "";
+            header('Content-type: text/html; charset=UTF-8');
+            echo "<h3>XML NÃO VALIDADO!</h3>";
+            echo "<pre>";
+            echo htmlspecialchars($tools->soapDebug);
+            echo print_r($tools->errors);
+            echo "</pre>";
+            die("msg=>".$msg."XML=>".$xml);
+            exit;
+        }
         //envia a solicitação via SOAP
         $retorno = $this->oSoap->send($this->urlService, $this->urlNamespace, $this->urlHeader, $body, $method);
         $lastMsg = $this->oSoap->lastMsg;
         $this->soapDebug = $this->oSoap->soapDebug;
         //salva mensagens
-        $filename = "$idLote-enviMDFe.xml";
-        $this->zGravaFile('mdfe', $tpAmb, $filename, $lastMsg);
-        $filename = "$idLote-retEnviMDFe.xml";
-        $this->zGravaFile('mdfe', $tpAmb, $filename, $retorno);
+        //$filename = "$idLote-enviMDFe.xml";
+        //$this->zGravaFile('mdfe', $tpAmb, $filename, $lastMsg);
+        //$filename = "$idLote-retEnviMDFe.xml";
+        //$this->zGravaFile('mdfe', $tpAmb, $filename, $retorno);
         //tratar dados de retorno
         $aRetorno = Response::readReturnSefaz($servico, $retorno);
         return (string) $retorno;
@@ -467,10 +484,10 @@ class Tools extends BaseTools
         $lastMsg = $this->oSoap->lastMsg;
         $this->soapDebug = $this->oSoap->soapDebug;
         //salva mensagens
-        $filename = "$recibo-consReciMDFe.xml";
-        $this->zGravaFile('mdfe', $tpAmb, $filename, $lastMsg);
-        $filename = "$recibo-retConsReciMDFe.xml";
-        $this->zGravaFile('mdfe', $tpAmb, $filename, $retorno);
+        //$filename = "$recibo-consReciMDFe.xml";
+        //$this->zGravaFile('mdfe', $tpAmb, $filename, $lastMsg);
+        //$filename = "$recibo-retConsReciMDFe.xml";
+        //$this->zGravaFile('mdfe', $tpAmb, $filename, $retorno);
         //tratar dados de retorno
         $aRetorno = Response::readReturnSefaz($servico, $retorno);
         return (string) $retorno;
@@ -535,10 +552,10 @@ class Tools extends BaseTools
         $lastMsg = $this->oSoap->lastMsg;
         $this->soapDebug = $this->oSoap->soapDebug;
         //salva mensagens
-        $filename = "$chMDFe-consSitMDFe.xml";
-        $this->zGravaFile('mdfe', $tpAmb, $filename, $lastMsg);
-        $filename = "$chMDFe-retConsSitMDFe.xml";
-        $this->zGravaFile('mdfe', $tpAmb, $filename, $retorno);
+        //$filename = "$chMDFe-consSitMDFe.xml";
+        //$this->zGravaFile('mdfe', $tpAmb, $filename, $lastMsg);
+        //$filename = "$chMDFe-retConsSitMDFe.xml";
+        //$this->zGravaFile('mdfe', $tpAmb, $filename, $retorno);
         //tratar dados de retorno
         $aRetorno = Response::readReturnSefaz($servico, $retorno);
 
@@ -599,10 +616,10 @@ class Tools extends BaseTools
         $lastMsg = $this->oSoap->lastMsg;
         $this->soapDebug = $this->oSoap->soapDebug;
         $datahora = date('Ymd_His');
-        $filename = $siglaUF."_"."$datahora-consStatServ.xml";
-        $this->zGravaFile('mdfe', $tpAmb, $filename, $lastMsg);
-        $filename = $siglaUF."_"."$datahora-retConsStatServ.xml";
-        $this->zGravaFile('mdfe', $tpAmb, $filename, $retorno);
+        //$filename = $siglaUF."_"."$datahora-consStatServ.xml";
+        //$this->zGravaFile('mdfe', $tpAmb, $filename, $lastMsg);
+        //$filename = $siglaUF."_"."$datahora-retConsStatServ.xml";
+        //$this->zGravaFile('mdfe', $tpAmb, $filename, $retorno);
         //tratar dados de retorno
         $aRetorno = Response::readReturnSefaz($servico, $retorno);
         return (string) $retorno;
@@ -696,7 +713,7 @@ class Tools extends BaseTools
             throw new Exception\InvalidArgumentException($msg);
         }
         $siglaUF = self::zGetSigla(substr($chMDFe, 0, 2));
-        //estabelece o codigo do tipo de evento CANCELAMENTO
+        //estabelece o codigo do tipo de evento ENCERRAMENTO
         $tpEvento = '110112';
         if ($nSeqEvento == '') {
             $nSeqEvento = '1';
@@ -797,7 +814,7 @@ class Tools extends BaseTools
         //    throw new Exception\RuntimeException($msg);
         //}
         //montagem dos dados da mensagem SOAP
-        $body = "<mdfeDadosMsg xmlns=\"$this->urlNamespace\">$cons</mdfeDadosMsg>";
+        $body = "<mdefDadosMsg xmlns=\"$this->urlNamespace\">$cons</mdfeDadosMsg>";
         //consome o webservice e verifica o retorno do SOAP
         $retorno = $this->oSoap->send(
             $this->urlService,
@@ -809,10 +826,10 @@ class Tools extends BaseTools
         $lastMsg = $this->oSoap->lastMsg;
         $this->soapDebug = $this->oSoap->soapDebug;
         $datahora = date('Ymd_His');
-        $filename = $siglaUF."_"."$datahora-consNaoEnc.xml";
-        $this->zGravaFile('mdfe', $tpAmb, $filename, $lastMsg);
-        $filename = $siglaUF."_"."$datahora-retConsNaoEnc.xml";
-        $this->zGravaFile('mdfe', $tpAmb, $filename, $retorno);
+        //$filename = $siglaUF."_"."$datahora-consNaoEnc.xml";
+        //$this->zGravaFile('mdfe', $tpAmb, $filename, $lastMsg);
+        //$filename = $siglaUF."_"."$datahora-retConsNaoEnc.xml";
+        //$this->zGravaFile('mdfe', $tpAmb, $filename, $retorno);
         //tratar dados de retorno
         $aRetorno = Response::readReturnSefaz($servico, $retorno);
         return (string) $retorno;
@@ -902,9 +919,9 @@ class Tools extends BaseTools
         $this->soapDebug = $this->oSoap->soapDebug;
         //salva mensagens
         $filename = "$chave-$aliasEvento-eventoMDFe.xml";
-        $this->zGravaFile('mdfe', $tpAmb, $filename, $lastMsg);
-        $filename = "$chave-$aliasEvento-retEventoMDFe.xml";
-        $this->zGravaFile('mdfe', $tpAmb, $filename, $retorno);
+        //$this->zGravaFile('mdfe', $tpAmb, $filename, $lastMsg);
+        //$filename = "$chave-$aliasEvento-retEventoMDFe.xml";
+        //$this->zGravaFile('mdfe', $tpAmb, $filename, $retorno);
         //tratar dados de retorno
         $this->aLastRetEvent = Response::readReturnSefaz($servico, $retorno);
         return (string) $retorno;
@@ -957,10 +974,10 @@ class Tools extends BaseTools
         $aResp = array();
         $schem = Identify::identificar($xml, $aResp);
         if ($schem == '') {
-            return true;
+            $this->errors[] = "Não foi possível identificar o documento";
         }
         $xsdFile = $aResp['Id'].'_v'.$aResp['versao'].'.xsd';
-        $xsdPath = NFEPHP_ROOT.DIRECTORY_SEPARATOR .
+        $xsdPath = $this->rootDir.DIRECTORY_SEPARATOR .
             'schemes' .
             DIRECTORY_SEPARATOR .
             $this->aConfig['schemesMDFe'] .
