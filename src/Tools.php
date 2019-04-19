@@ -20,6 +20,7 @@ use NFePHP\Common\Signer;
 use NFePHP\Common\Soap\SoapCurl;
 use NFePHP\Common\UFList;
 use NFePHP\Common\Validator;
+use NFePHP\Common\Dom;
 use NFePHP\MDFe\Common\Config;
 use NFePHP\Common\Strings;
 use NFePHP\Common\Exception;
@@ -216,7 +217,126 @@ class Tools
         }
         return $mail->envia($pathXml, $aMails, $comPdf);
     }
-
+    
+    /**
+     * addProtocolo
+     * Adiciona o protocolo de autorização de uso da MDFe
+     * NOTA: exigência da SEFAZ, a MDFe somente é válida com o seu respectivo protocolo
+     *
+     * @param  string  $pathMDFefile
+     * @param  string  $pathProtfile
+     * @param  boolean $saveFile
+     * @return string
+     * @throws Exception\RuntimeException
+     */
+    public function addProtocolo($pathMDFefile = '', $pathProtfile = '', $saveFile = false)
+    {
+        //carrega a MDFe
+        $docmdfe = new Dom();
+        if (file_exists($pathMDFefile)) {
+            //carrega o XML pelo caminho do arquivo informado
+            $docmdfe->loadXMLFile($pathMDFefile);
+        } else {
+            //carrega o XML pelo conteúdo
+            $docmdfe->loadXMLString($pathMDFefile);
+        }
+        $nodemdfe = $docmdfe->getNode('MDFe', 0);
+        if ($nodemdfe == '') {
+            $msg = "O arquivo indicado como MDFe não é um xml de MDFe!";
+            throw new Exception\RuntimeException($msg);
+        }
+        if ($docmdfe->getNode('Signature') == '') {
+            $msg = "O MDFe não está assinado!";
+            throw new Exception\RuntimeException($msg);
+        }
+        //carrega o protocolo
+        $docprot = new Dom();
+        if (file_exists($pathMDFefile)) {
+            //carrega o XML pelo caminho do arquivo informado
+            $docprot->loadXMLFile($pathProtfile);
+        } else {
+            //carrega o XML pelo conteúdo
+            $docprot->loadXMLString($pathProtfile);
+        }
+        $nodeprots = $docprot->getElementsByTagName('protMDFe');
+        if ($nodeprots->length == 0) {
+            $msg = "O arquivo indicado não contêm um protocolo de autorização!";
+            throw new Exception\RuntimeException($msg);
+        }
+        //carrega dados da MDFe
+        $tpAmb = $docmdfe->getNodeValue('tpAmb');
+        $anomes = date(
+            'Ym',
+            DateTime::convertSefazTimeToTimestamp($docmdfe->getNodeValue('dhEmi'))
+        );
+        $infMDFe = $docmdfe->getNode("infMDFe", 0);
+        $versao = $infMDFe->getAttribute("versao");
+        $chaveId = $infMDFe->getAttribute("Id");
+        $chaveMDFe = preg_replace('/[^0-9]/', '', $chaveId);
+        $digValueMDFe = $docmdfe->getNodeValue('DigestValue');
+        //carrega os dados do protocolo
+        for ($i = 0; $i < $nodeprots->length; $i++) {
+            $nodeprot = $nodeprots->item($i);
+            $protver = $nodeprot->getAttribute("versao");
+            $chaveProt = $nodeprot->getElementsByTagName("chMDFe")->item(0)->nodeValue;
+            $digValueProt = $nodeprot->getElementsByTagName("digVal")->item(0)->nodeValue;
+            $infProt = $nodeprot->getElementsByTagName("infProt")->item(0);
+            if ($digValueMDFe == $digValueProt && $chaveMDFe == $chaveProt) {
+                break;
+            }
+        }
+        if ($digValueMDFe != $digValueProt) {
+            $msg = "Inconsistência! O DigestValue do MDFe não combina com o"
+                . " do digVal do protocolo indicado!";
+            throw new Exception\RuntimeException($msg);
+        }
+        if ($chaveMDFe != $chaveProt) {
+            $msg = "O protocolo indicado pertence a outro MDFe. Os números das chaves não combinam !";
+            throw new Exception\RuntimeException($msg);
+        }
+        //cria a MDFe processada com a tag do protocolo
+        $procmdfe = new \DOMDocument('1.0', 'UTF-8');
+        $procmdfe->formatOutput = false;
+        $procmdfe->preserveWhiteSpace = false;
+        //cria a tag mdfeProc
+        $mdfeProc = $procmdfe->createElement('mdfeProc');
+        $procmdfe->appendChild($mdfeProc);
+        //estabele o atributo de versão
+        $mdfeProcAtt1 = $mdfeProc->appendChild($procmdfe->createAttribute('versao'));
+        $mdfeProcAtt1->appendChild($procmdfe->createTextNode($protver));
+        //estabelece o atributo xmlns
+        $mdfeProcAtt2 = $mdfeProc->appendChild($procmdfe->createAttribute('xmlns'));
+        $mdfeProcAtt2->appendChild($procmdfe->createTextNode($this->urlPortal));
+        //inclui a tag MDFe
+        $node = $procmdfe->importNode($nodemdfe, true);
+        $mdfeProc->appendChild($node);
+        //cria tag protMDFe
+        $protMDFe = $procmdfe->createElement('protMDFe');
+        $mdfeProc->appendChild($protMDFe);
+        //estabele o atributo de versão
+        $protMDFeAtt1 = $protMDFe->appendChild($procmdfe->createAttribute('versao'));
+        $protMDFeAtt1->appendChild($procmdfe->createTextNode($versao));
+        //cria tag infProt
+        $nodep = $procmdfe->importNode($infProt, true);
+        $protMDFe->appendChild($nodep);
+        //salva o xml como string em uma variável
+        $procXML = $procmdfe->saveXML();
+        //remove as informações indesejadas
+        $procXML = Strings::clearProt($procXML);
+        if ($saveFile) {
+            $filename = "$chaveMDFe-protMDFe.xml";
+            $this->zGravaFile(
+                'mdfe',
+                $tpAmb,
+                $filename,
+                $procXML,
+                'enviadas'.DIRECTORY_SEPARATOR.'aprovadas',
+                $anomes
+            );
+        }
+        return $procXML;
+    }
+    
     /**
      * addCancelamento
      * Adiciona a tga de cancelamento a uma MDFe já autorizada
@@ -392,7 +512,7 @@ class Tools
         $tpAmb = $this->config->siglaUF;
 
         //carrega serviço
-        $this->servico('MDFeRecepcao',$this->config->siglaUF, $this->config->tpAmb);
+        $this->servico('MDFeRecepcao', $this->config->siglaUF, $this->config->tpAmb, true);
 
         //montagem dos dados da mensagem SOAP
         $cons = "<enviMDFe xmlns=\"$this->urlPortal\" versao=\"$this->versao\">"
@@ -422,7 +542,7 @@ class Tools
         $tpAmb = $this->config->tpAmb;
         $siglaUF = $this->config->siglaUF;
         //carrega serviço
-        $this->servico('MDFeRetRecepcao',$siglaUF, $tpAmb);
+        $this->servico('MDFeRetRecepcao', $siglaUF, $tpAmb, true);
 
         $cons = "<consReciMDFe xmlns=\"$this->urlPortal\" versao=\"{$this->versao}\">"
             . "<tpAmb>$tpAmb</tpAmb>"
@@ -656,7 +776,7 @@ class Tools
     protected function sefazEvento($chave, $cOrgao, $tpEvento, $nSeqEvento = 1, $tagAdic = '')
     {
         //carrega serviço
-        $this->servico('MDFeRecepcaoEvento',$this->config->siglaUF, $this->config->tpAmb);
+        $this->servico('MDFeRecepcaoEvento',$this->config->siglaUF, $this->config->tpAmb, true);
         $cons = '';
 
         $ambiente = $this->config->tpAmb == 1 ? "producao" : "homologacao";
