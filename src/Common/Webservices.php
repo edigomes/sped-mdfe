@@ -43,7 +43,7 @@ class Webservices
      */
     public function get($sigla, $ambiente, $metodo)
     {
-        return $this->std->$sigla->$ambiente->$metodo;
+        return $this->std->RS->$ambiente->$metodo;
     }
 
     /**
