@@ -14,13 +14,14 @@ namespace NFePHP\MDFe;
  */
 
 use DOMDocument;
+use NFePHP\Common\DateTime\DateTime;
 use InvalidArgumentException;
 use NFePHP\Common\Certificate;
 use NFePHP\Common\Signer;
 use NFePHP\Common\Soap\SoapCurl;
 use NFePHP\Common\UFList;
 use NFePHP\Common\Validator;
-use NFePHP\Common\Dom;
+use NFePHP\Common\DOMImproved as Dom;
 use NFePHP\MDFe\Common\Config;
 use NFePHP\Common\Strings;
 use NFePHP\Common\Exception;
@@ -322,7 +323,7 @@ class Tools
         //salva o xml como string em uma variável
         $procXML = $procmdfe->saveXML();
         //remove as informações indesejadas
-        $procXML = Strings::clearProt($procXML);
+        $procXML = Strings::clearProtocoledXML($procXML);
         if ($saveFile) {
             $filename = "$chaveMDFe-protMDFe.xml";
             $this->zGravaFile(
@@ -409,7 +410,7 @@ class Tools
                 $docmdfe->getElementsByTagName('xMotivo')->item(0)->nodeValue = 'Cancelamento de MDF-e homologado';
                 $procXML = $docmdfe->saveXML();
                 //remove as informações indesejadas
-                $procXML = Strings::clearProt($procXML);
+                $procXML = Strings::clearProtocoledXML($procXML);
                 if ($saveFile) {
                     $filename = "$chaveMDFe-protMDFe.xml";
                     $this->zGravaFile(
