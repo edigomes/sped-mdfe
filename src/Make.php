@@ -169,11 +169,15 @@ class Make
         $this->buildInfDoc();
         $this->dom->appChild($this->infMDFe, $this->infDoc, 'Falta tag "infMDFe"');
         //tag seg [118]
-        $this->dom->appChild($this->infMDFe, $this->seg, 'Falta tag "infMDFe"');
+        if (isset($this->seg)) {
+            $this->dom->appChild($this->infMDFe, $this->seg, 'Falta tag "infMDFe"');
+        }
         //tag tot [128]
         $this->dom->appChild($this->infMDFe, $this->tot, 'Falta tag "infMDFe"');
         //tag lacres [135]
-        $this->dom->addArrayChild($this->infMDFe, $this->aLacres);
+        if (isset($this->aLacres)) {
+            $this->dom->addArrayChild($this->infMDFe, $this->aLacres);
+        }
         //tag lacres [137]
         $this->dom->addArrayChild($this->infMDFe, $this->aAutXML);
         //tag lacres [140]
