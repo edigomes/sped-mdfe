@@ -18,12 +18,21 @@ namespace NFePHP\MDFe;
  * @author    Roberto L. Machado <linux.rlm at gmail dot com>
  */
 
-use NFePHP\Common\DateTime\DateTime;
-use NFePHP\Common\Base\BaseMake;
-use \DOMElement;
+use NFePHP\Common\Keys;
+use NFePHP\Common\DOMImproved as Dom;
+use NFePHP\Common\Strings;
+use NFePHP\NFe\Common\Gtin;
+use stdClass;
+use RuntimeException;
+use DOMElement;
+use DateTime;
 
-class Make extends BaseMake
-{
+class Make {
+    
+    /**
+     * @var array
+     */
+    public $erros = [];
     /**
      * versao
      * numero da versão do xml da MDFe
@@ -39,6 +48,10 @@ class Make extends BaseMake
      */
     public $mod = '58';
     /**
+     * @var \NFePHP\Common\DOMImproved
+     */
+    public $dom;
+    /**
      * chave da MDFe
      *
      * @var string
@@ -47,7 +60,7 @@ class Make extends BaseMake
 
     //propriedades privadas utilizadas internamente pela classe
     /**
-     * @type string|\DOMNode
+     * @var DOMElement
      */
     private $MDFe = '';
     /**
@@ -116,12 +129,60 @@ class Make extends BaseMake
     private $aInfTermDescarreg = []; //array de DOMNode
     private $aInfEmbComb = []; //array de DOMNode
     private $aCountDoc = []; //contador de documentos fiscais
+    
+    public function __construct()
+    {
+        $this->dom = new Dom('1.0', 'UTF-8');
+        $this->dom->preserveWhiteSpace = false;
+        $this->dom->formatOutput = false;
+        //elemento totalizador
+        $this->stdTot = new \stdClass();
+    }
+    
+    /**
+     * Returns xml string and assembly it is necessary
+     * @return string
+     */
+    public function getXML()
+    {
+        if (empty($this->xml)) {
+            $this->montaNFe();
+        }
+        return $this->xml;
+    }
 
+    /**
+     * Retorns the key number of NFe (44 digits)
+     * @return string
+     */
+    public function getChave()
+    {
+        return $this->chMDFe;
+    }
+
+    /**
+     * Returns the model of NFe 55 or 65
+     * @return int
+     */
+    public function getModelo()
+    {
+        return $this->mod;
+    }
+    
+    /**
+     * Call method of xml assembly. For compatibility only.
+     * @return boolean
+     */
+    public function montaMDFe()
+    {
+        return $this->monta();
+    }
+    
     /**
      *
      * @return boolean
      */
-    public function montaMDFe()
+    public function monta()
     {
         if (count($this->erros) > 0) {
             return false;
@@ -157,9 +218,9 @@ class Make extends BaseMake
         //[1] tag infMDFe (1 A01)
         $this->dom->appChild($this->MDFe, $this->infMDFe, 'Falta tag "MDFe"');
         //[0] tag MDFe
-        $this->dom->appChild($this->dom, $this->MDFe, 'Falta DOMDocument');
+        $this->dom->appendChild($this->MDFe);
         // testa da chave
-        $this->zTestaChaveXML($this->dom);
+        $this->checkNFeKey($this->dom);
         //convert DOMDocument para string
         $this->xml = $this->dom->saveXML();
         return true;
@@ -213,6 +274,7 @@ class Make extends BaseMake
         $cUF = '',
         $tpAmb = '',
         $tpEmit = '',
+        $tpTransp = '',
         $mod = '58',
         $serie = '',
         $nMDF = '',
@@ -1711,6 +1773,52 @@ class Make extends BaseMake
             $this->dom->addArrayChild($this->aqua, $this->aInfTermDescarreg);
             $this->dom->addArrayChild($this->aqua, $this->aInfEmbComb);
             $this->dom->appChild($this->infModal, $this->aqua, 'Falta tag "infModal"');
+        }
+    }
+    
+    /**
+     * Remonta a chave da NFe de 44 digitos com base em seus dados
+     * já contidos na NFE.
+     * Isso é útil no caso da chave informada estar errada
+     * se a chave estiver errada a mesma é substituida
+     * @param Dom $dom
+     * @return void
+     */
+    protected function checkNFeKey(Dom $dom)
+    {
+        $infNFe = $dom->getElementsByTagName("infMDFe")->item(0);
+        $ide = $dom->getElementsByTagName("ide")->item(0);
+        $emit = $dom->getElementsByTagName("emit")->item(0);
+        $cUF = $ide->getElementsByTagName('cUF')->item(0)->nodeValue;
+        $dhEmi = $ide->getElementsByTagName('dhEmi')->item(0)->nodeValue;
+        $cnpj = $emit->getElementsByTagName('CNPJ')->item(0)->nodeValue;
+        $mod = $ide->getElementsByTagName('mod')->item(0)->nodeValue;
+        $serie = $ide->getElementsByTagName('serie')->item(0)->nodeValue;
+        $nNF = $ide->getElementsByTagName('nMDF')->item(0)->nodeValue;
+        $tpEmis = $ide->getElementsByTagName('tpEmis')->item(0)->nodeValue;
+        $cNF = $ide->getElementsByTagName('cMDF')->item(0)->nodeValue;
+        $chave = str_replace('MDFe', '', $infNFe->getAttribute("Id"));
+
+        $dt = new DateTime($dhEmi);
+
+        $chaveMontada = Keys::build(
+            $cUF,
+            $dt->format('y'),
+            $dt->format('m'),
+            $cnpj,
+            $mod,
+            $serie,
+            $nNF,
+            $tpEmis,
+            $cNF
+        );
+        //caso a chave contida na NFe esteja errada
+        //substituir a chave
+        if ($chaveMontada != $chave) {
+            $ide->getElementsByTagName('cDV')->item(0)->nodeValue = substr($chaveMontada, -1);
+            $infMDFe = $dom->getElementsByTagName("infMDFe")->item(0);
+            $infMDFe->setAttribute("Id", "MDFe" . $chaveMontada);
+            $this->chMDFe = $chaveMontada;
         }
     }
 
